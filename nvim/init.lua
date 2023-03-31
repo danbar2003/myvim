@@ -1,79 +1,65 @@
-local impatient_ok, impatient = pcall(require, "impatient")
-if impatient_ok then impatient.enable_profile() end
-
 for _, source in ipairs {
-  "core.utils",
-  "core.options",
-  "core.bootstrap",
-  "core.diagnostics",
-  "core.autocmds",
-  "core.mappings",
-  "configs.which-key-register",
+  "astronvim.bootstrap",
+  "astronvim.options",
+  "astronvim.lazy",
+  "astronvim.autocmds",
+  "astronvim.mappings",
 } do
   local status_ok, fault = pcall(require, source)
   if not status_ok then vim.api.nvim_err_writeln("Failed to load " .. source .. "\n\n" .. fault) end
 end
 
-astronvim.conditional_func(astronvim.user_plugin_opts("polish", nil, false))
+if astronvim.default_colorscheme then
+  if not pcall(vim.cmd.colorscheme, astronvim.default_colorscheme) then
+    require("astronvim.utils").notify("Error setting up colorscheme: " .. astronvim.default_colorscheme, "error")
+  end
+end
 
+require("astronvim.utils").conditional_func(astronvim.user_opts("polish", nil, false), true)
 vim.cmd("set guicursor=n-v-c-i:block")
-vim.cmd("colorscheme gruvbox-material")
 
-local lsp = require("core.utils.lsp")
+local lsp = require("astronvim.utils.lsp")
 local opts = {
-  tools = { -- rust-tools options
+  tools = {
+    -- rust-tools options
 
     -- how to execute terminal commands
     -- options right now: termopen / quickfix
     executor = require("rust-tools.executors").termopen,
-
     -- callback to execute once rust-analyzer is done initializing the workspace
     -- The callback receives one parameter indicating the `health` of the server: "ok" | "warning" | "error"
     on_initialized = nil,
-
     -- automatically call RustReloadWorkspace when writing to a Cargo.toml file.
     reload_workspace_from_cargo_toml = true,
-
     -- These apply to the default RustSetInlayHints command
     inlay_hints = {
       -- automatically set inlay hints (type hints)
       -- default: true
       auto = true,
-
       -- Only show inlay hints for the current line
       only_current_line = false,
-
       -- whether to show parameter hints with the inlay hints or not
       -- default: true
       show_parameter_hints = true,
-
       -- prefix for parameter hints
       -- default: "<-"
       parameter_hints_prefix = "<- ",
-
       -- prefix for all the other hints (type, chaining)
       -- default: "=>"
       other_hints_prefix = "=> ",
-
       -- whether to align to the length of the longest line in the file
       max_len_align = false,
-
       -- padding from the left if max_len_align is true
       max_len_align_padding = 1,
-
       -- whether to align to the extreme right or not
       right_align = false,
-
       -- padding from the right if right_align is true
       right_align_padding = 7,
-
       -- The color of the hints
       highlight = "Comment",
     },
-
     -- options same as lsp hover / vim.lsp.util.open_floating_preview()
     hover_actions = {
-
       -- the border that is used for the hover window
       -- see vim.api.nvim_open_win()
       border = {
@@ -86,18 +72,14 @@ local opts = {
         { "╰", "FloatBorder" },
         { "│", "FloatBorder" },
       },
-
       -- Maximal width of the hover window. Nil means no max.
       max_width = nil,
-
       -- Maximal height of the hover window. Nil means no max.
       max_height = nil,
-
       -- whether the hover action window gets automatically focused
       -- default: false
       auto_focus = false,
     },
-
     -- settings for showing the crate graph based on graphviz and the dot
     -- command
     crate_graph = {
@@ -113,7 +95,6 @@ local opts = {
       -- crates
       -- default: true
       full = true,
-
       -- List of backends found on: https://graphviz.org/docs/outputs/
       -- Is used for input validation and autocompletion
       -- Last updated: 2021-08-26
@@ -175,7 +156,6 @@ local opts = {
       },
     },
   },
-
   -- all the opts to send to nvim-lspconfig
   -- these override the defaults set by rust-tools.nvim
   -- see https://github.com/neovim/nvim-lspconfig/blob/master/doc/server_configurations.md#rust_analyzer
@@ -186,15 +166,47 @@ local opts = {
     -- setting it to false may improve startup time
     standalone = true,
   }, -- rust-analyzer options
-
   -- debugging stuff
   dap = {
     adapter = {
       type = "executable",
-      command = "lldb-vscode",
+      command = "/usr/bin/lldb-vscode-14",
       name = "rt_lldb",
     },
   },
 }
 
 require('rust-tools').setup(opts)
+
+require('dap').adapters.python = {
+  type = 'executable',
+  command = '/usr/bin/python3',
+  args = { '-m', 'debugpy.adapter' },
+}
+
+require("dap").configurations.python = {
+  {
+    type = "python",
+    request = "launch",
+    name = "Python: Current File",
+    program = "${file}",
+    pythonPath = "/usr/bin/python3",
+  },
+}
+
+require("dap").adapters.rust = opts.dap.adapter
+require("dap").configurations.rust = {
+  {
+    type = 'rust',
+    name = 'Launch',
+    request = 'launch',
+    program = function()
+      return vim.fn.input('Path to executable: ', vim.fn.getcwd() .. '/target/debug/', 'file')
+    end,
+    cwd = '${workspaceFolder}',
+    args = {},
+    env = {},
+    externalConsole = true,
+    sourceLanguages = { 'rust' },
+  },
+}
